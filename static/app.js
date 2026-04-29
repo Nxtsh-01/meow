@@ -42,6 +42,13 @@ const historyList = document.getElementById('history-list');
 async function init() {
     await openDB();
     await refreshHistorySidebar();
+    
+    // Auto-load most recent session if available
+    const sessions = await getAllSessions();
+    if (sessions.length > 0 && currentMessages.length === 0) {
+        await loadSession(sessions[0].id);
+    }
+    
     userInput.focus();
 }
 
@@ -224,12 +231,20 @@ async function sendMessage() {
     showTypingIndicator();
 
     try {
+        const historyMessages = currentMessages
+            .filter(msg => msg.role !== 'system')
+            .map(msg => ({
+                role: msg.role === 'ai' ? 'assistant' : 'user',
+                content: msg.content
+            }));
+            
         const resp = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
                 session_id: currentSessionId,
+                history: historyMessages
             }),
         });
 

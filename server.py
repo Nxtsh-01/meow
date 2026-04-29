@@ -76,10 +76,14 @@ app.add_middleware(
 # ──────────────────────────────────────────────
 # Request / Response models
 # ──────────────────────────────────────────────
+class Message(BaseModel):
+    role: str
+    content: str
+
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
-
+    history: list[Message] = []
 
 class ChatResponse(BaseModel):
     response: str
@@ -87,16 +91,20 @@ class ChatResponse(BaseModel):
     session_id: str
     time_taken: float
 
-
 # ──────────────────────────────────────────────
 # Core logic: parallel model querying via NVIDIA
 # ──────────────────────────────────────────────
 async def query_single_model(
     client: httpx.AsyncClient,
     model_name: str,
+    history: list[Message],
     prompt: str,
 ) -> dict:
     """Query a single model via NVIDIA NIM API."""
+    
+    messages = [{"role": m.role, "content": m.content} for m in history]
+    messages.append({"role": "user", "content": prompt})
+
     try:
         resp = await client.post(
             NVIDIA_API_BASE,
@@ -106,9 +114,7 @@ async def query_single_model(
             },
             json={
                 "model": model_name,
-                "messages": [
-                    {"role": "user", "content": prompt},
-                ],
+                "messages": messages,
                 "temperature": 0.7,
                 "max_tokens": 1024,
             },
@@ -131,12 +137,11 @@ async def query_single_model(
             "error": str(e),
         }
 
-
-async def query_all_models(prompt: str) -> list[dict]:
+async def query_all_models(history: list[Message], prompt: str) -> list[dict]:
     """Query all configured models in parallel."""
     async with httpx.AsyncClient() as client:
         tasks = [
-            query_single_model(client, m["name"], prompt)
+            query_single_model(client, m["name"], history, prompt)
             for m in MODELS
         ]
         results = await asyncio.gather(*tasks)
