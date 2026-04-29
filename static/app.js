@@ -41,6 +41,7 @@ const historyList = document.getElementById('history-list');
 // ──────────────────────────────────────────────
 async function init() {
     await openDB();
+    await cleanupOldSessions();
     await refreshHistorySidebar();
     
     // Auto-load most recent session if available
@@ -118,6 +119,26 @@ async function getSession(id) {
         request.onsuccess = () => resolve(request.result);
         request.onerror = (e) => reject(e.target.error);
     });
+}
+
+async function cleanupOldSessions() {
+    if (!db) return;
+    const oneMonthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const sessions = await getAllSessions();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    let deletedCount = 0;
+    
+    sessions.forEach(session => {
+        if (session.updatedAt < oneMonthAgo) {
+            store.delete(session.id);
+            deletedCount++;
+        }
+    });
+    
+    if (deletedCount > 0) {
+        console.log(`Deleted ${deletedCount} old session(s)`);
+    }
 }
 
 // ──────────────────────────────────────────────
