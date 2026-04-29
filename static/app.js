@@ -186,15 +186,13 @@ function removeTypingIndicator() {
 }
 
 // Use Marked.js for rendering
-marked.setOptions({
-    breaks: true,
-    gfm: true
-});
-
 function renderMarkdown(text) {
     if (!text) return '';
     try {
-        return marked.parse(text);
+        if (typeof marked !== 'undefined') {
+            return marked.parse(text, { breaks: true, gfm: true });
+        }
+        return `<p>${escapeHtml(text)}</p>`;
     } catch (e) {
         console.error("Markdown parsing error", e);
         return `<p>${escapeHtml(text)}</p>`;
