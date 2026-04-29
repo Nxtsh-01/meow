@@ -232,23 +232,113 @@ Here are responses from different AI models:
 
 
 # ──────────────────────────────────────────────
+# Multimedia Pipelines (NVIDIA stable-diffusion & stable-video)
+# ──────────────────────────────────────────────
+async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
+    print(f"   🖼️ Generating Image bounds via SD3: {prompt}")
+    resp = await client.post(
+        "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
+        headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
+        json={"prompt": prompt, "aspect_ratio": "16:9", "output_format": "jpeg"},
+        timeout=60.0
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    b64 = data.get("image") or (data.get("artifacts") and data["artifacts"][0].get("base64"))
+    if not b64:
+        raise Exception("NVIDIA API did not return image data.")
+    return b64
+
+async def generate_video(b64_image: str, client: httpx.AsyncClient) -> str:
+    print("   🎞️ Animating Image frame via SVD...")
+    resp = await client.post(
+        "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-video-diffusion",
+        headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
+        json={"image": f"data:image/jpeg;base64,{b64_image}", "cfg_scale": 2.5, "motion_bucket_id": 127},
+        timeout=180.0
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    b64_vid = data.get("video") or (data.get("artifacts") and data["artifacts"][0].get("base64"))
+    if not b64_vid:
+        raise Exception("NVIDIA API did not return video data.")
+    return b64_vid
+
+# ──────────────────────────────────────────────
 # API endpoints
 # ──────────────────────────────────────────────
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Main chat endpoint — queries models in parallel, synthesizes answer."""
+    """Main chat endpoint — intercepts multimedia or queries models in parallel."""
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     if not NVIDIA_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="NVIDIA_API_KEY not set. Get a free key at https://build.nvidia.com",
-        )
+        raise HTTPException(status_code=500, detail="NVIDIA_API_KEY not set.")
 
     session_id = req.session_id or str(uuid.uuid4())
     start = time.time()
+    msg_lower = req.message.lower().strip()
+    
+    # ── Multimedia Interceptor ──
+    is_image = msg_lower.startswith("generate image") or msg_lower.startswith("create image")
+    is_video = msg_lower.startswith("generate video") or msg_lower.startswith("create video")
+    
+    if is_image or is_video:
+        prompt_parts = req.message.split(" ", 2)
+        prompt = prompt_parts[-1] if len(prompt_parts) > 2 else req.message
+        try:
+            async with httpx.AsyncClient() as client:
+                b64_img = await generate_image(prompt, client)
+                
+                if is_video:
+                    b64_vid = await generate_video(b64_img, client)
+                    media_html = f"""
+### Video Generation Complete!
+"{prompt}"
 
+<div class="media-download-card" style="margin-top: 16px;">
+    <video controls loop autoplay style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <source src="data:video/mp4;base64,{b64_vid}" type="video/mp4">
+    </video>
+    <br>
+    <a href="data:video/mp4;base64,{b64_vid}" download="MEOW_Video_{int(time.time())}.mp4" class="btn-new-chat" style="display:inline-block; margin-top:12px; text-decoration:none; justify-content:center;">
+        ⬇️ Download Video (.mp4)
+    </a>
+</div>
+"""
+                    used = ["Stable Video Diffusion"]
+                else:
+                    media_html = f"""
+### Image Generation Complete!
+"{prompt}"
+
+<div class="media-download-card" style="margin-top: 16px;">
+    <img src="data:image/jpeg;base64,{b64_img}" alt="{prompt}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+    <br>
+    <a href="data:image/jpeg;base64,{b64_img}" download="MEOW_Image_{int(time.time())}.jpg" class="btn-new-chat" style="display:inline-block; margin-top:12px; text-decoration:none; justify-content:center;">
+        ⬇️ Download Image (.jpg)
+    </a>
+</div>
+"""
+                    used = ["Stable Diffusion 3"]
+                    
+            elapsed = round(time.time() - start, 2)
+            return ChatResponse(
+                response=media_html,
+                models_used=used,
+                session_id=session_id,
+                time_taken=elapsed
+            )
+        except Exception as e:
+            return ChatResponse(
+                response=f"**Multimedia Generation Failed:** \n\n```text\n{str(e)}\n```\nMake sure your NVIDIA API key permits generative visual models.",
+                models_used=["Error"],
+                session_id=session_id,
+                time_taken=0.0
+            )
+
+    # ── Standard LLM Logic ──
     print(f"\n🔮 Question: {req.message[:80]}...")
     print(f"   Querying {len(MODELS)} models in parallel via NVIDIA NIM...")
 
