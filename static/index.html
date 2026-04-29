@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEOW — AI Tutor</title>
+    <meta name="description" content="MEOW: An elegant, minimal multi-model AI tutor.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ─── Sidebar: Chat History ─── -->
+<aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+        <button id="new-chat-sidebar-btn" class="btn-new-chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New chat
+        </button>
+        <button id="sidebar-close" class="btn-icon" aria-label="Close sidebar">✕</button>
+    </div>
+    
+    <div class="sidebar-section-title">Recent</div>
+    <div id="history-list" class="history-list">
+        <!-- History items populated via JS -->
+    </div>
+</aside>
+
+<!-- ─── Sidebar Overlay ─── -->
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+<!-- ─── Main App ─── -->
+<main class="app-container">
+
+    <!-- Top bar -->
+    <header class="top-bar">
+        <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle history sidebar">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </button>
+        <div class="top-bar-title">MEOW</div>
+        <div style="width: 24px;"></div> <!-- Spacer -->
+    </header>
+
+    <!-- Main Content Area (Scrollable) -->
+    <div id="scroll-container" class="scroll-container">
+        <!-- Hero Section (Greeting) -->
+        <section id="hero-section" class="hero-section">
+            <div class="avatar-large">M</div>
+            <h1 class="hero-title">Good afternoon.</h1>
+            <p class="hero-subtitle">How can I help you learn today?</p>
+        </section>
+
+        <!-- Chat Area -->
+        <section id="chat-area" class="chat-area">
+            <div id="messages-container" class="messages-container"></div>
+            <!-- Empty space element so the last message isn't hidden behind the input bar -->
+            <div class="scroll-spacer"></div>
+        </section>
+    </div>
+
+    <!-- Floating Input Bar -->
+    <div class="input-container">
+        <div class="input-wrapper">
+            <textarea
+                id="user-input"
+                placeholder="Message MEOW..."
+                rows="1"
+                aria-label="Type your question"
+            ></textarea>
+            <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+        </div>
+        <!-- Footer removed for MEOW standalone identity -->
+    </div>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
