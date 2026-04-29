@@ -193,7 +193,18 @@ function addMessageToUI(role, content) {
 
     if (role === 'ai') {
         bubble.innerHTML = renderMarkdown(content);
-        // Models used footer removed for branding reasons
+        
+        const ttsBtn = document.createElement('button');
+        ttsBtn.className = 'btn-icon';
+        ttsBtn.style.position = 'absolute';
+        ttsBtn.style.top = '4px';
+        ttsBtn.style.right = '-32px';
+        ttsBtn.title = "Read Aloud";
+        ttsBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+        ttsBtn.onclick = () => window.speakText(content);
+        
+        wrapper.style.position = 'relative';
+        wrapper.appendChild(ttsBtn);
     } else {
         bubble.textContent = content;
     }
@@ -426,6 +437,102 @@ newChatSidebarBtn.addEventListener('click', startNewChat);
 sidebarToggle.addEventListener('click', openSidebar);
 sidebarClose.addEventListener('click', closeSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
+
+// ──────────────────────────────────────────────
+// Phase 3 Features: Voice, File Parsing, PDF Export
+// ──────────────────────────────────────────────
+
+// 1. PDF Export
+window.exportChatToPDF = function() {
+    const element = document.getElementById('scroll-container');
+    const opt = {
+      margin:       0.5,
+      filename:     'MEOW_Chat_Transcript.pdf',
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+};
+
+// 2. Text to Speech (TTS)
+window.speakText = function(text) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[#*`_]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+};
+
+// 3. Speech to Text (Mic)
+let recognition = null;
+if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRec();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    
+    recognition.onresult = (e) => {
+        const transcript = e.results[0][0].transcript;
+        userInput.value += (userInput.value ? " " : "") + transcript;
+        updateSendButtonState();
+        document.getElementById('mic-btn').classList.remove('recording');
+    };
+    recognition.onerror = () => document.getElementById('mic-btn').classList.remove('recording');
+    recognition.onend = () => document.getElementById('mic-btn').classList.remove('recording');
+}
+
+const micBtn = document.getElementById('mic-btn');
+if (micBtn) {
+    micBtn.addEventListener('click', () => {
+        if (!recognition) return alert("Voice input not supported in this browser.");
+        micBtn.classList.add('recording');
+        recognition.start();
+    });
+}
+
+// 4. File Upload (Client-Side Parsing)
+const attachBtn = document.getElementById('attach-btn');
+const fileUpload = document.getElementById('file-upload');
+if (attachBtn && fileUpload) {
+    attachBtn.addEventListener('click', () => fileUpload.click());
+    
+    fileUpload.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        addMessageToUI('user', `📎 Attached File: **${file.name}**`);
+        let extractedText = "";
+        
+        try {
+            if (file.type === "application/pdf" || file.name.endsWith('.pdf')) {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    extractedText += textContent.items.map(item => item.str).join(' ') + "\n";
+                }
+            } else {
+                extractedText = await file.text();
+            }
+            
+            currentMessages.push({
+                role: 'user',
+                content: `[FILE ATTACHED BY USER: ${file.name}]\n\n${extractedText}`,
+                timestamp: Date.now(),
+                isHidden: true
+            });
+            await saveSession();
+            
+        } catch (error) {
+            console.error(error);
+            addMessageToUI('ai', `I'm sorry, I couldn't read the file **${file.name}**. It might be corrupted.`);
+        }
+        e.target.value = "";
+    });
+}
 
 // Boot
 init();
