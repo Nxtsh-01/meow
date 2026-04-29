@@ -40,6 +40,7 @@ const historyList = document.getElementById('history-list');
 // Initialization
 // ──────────────────────────────────────────────
 async function init() {
+    updateGreeting();
     await openDB();
     await cleanupOldSessions();
     await refreshHistorySidebar();
@@ -51,6 +52,20 @@ async function init() {
     }
     
     userInput.focus();
+}
+
+function updateGreeting() {
+    const heroGreeting = document.getElementById('hero-greeting');
+    if (!heroGreeting) return;
+    
+    const hour = new Date().getHours();
+    if (hour < 12) {
+        heroGreeting.textContent = "Good morning.";
+    } else if (hour < 18) {
+        heroGreeting.textContent = "Good afternoon.";
+    } else {
+        heroGreeting.textContent = "Good evening.";
+    }
 }
 
 // ──────────────────────────────────────────────
