@@ -63,14 +63,44 @@ async def lifespan(app: FastAPI):
         print(f"📚 Models: {[m['label'] for m in MODELS]}")
     yield
 
+from collections import defaultdict
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 app = FastAPI(title="MEOW AI Tutor", lifespan=lifespan)
 
+# 1. Restrict CORS: Only allow the exact domain it's hosted on to prevent embedding
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[], # Empty strictly prevents CORS browser requests from other sites
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+# 2. Anti-DDoS Rate Limiter: Prevent automated scripts from draining the API key
+ip_requests = defaultdict(list)
+
+@app.middleware("http")
+async def rate_limiter(request: Request, call_next):
+    if request.url.path == "/api/chat":
+        # Extract the real IP behind Render's load balancers
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0]
+        now = time.time()
+        
+        # Keep only timestamps from the last 60 seconds
+        ip_requests[client_ip] = [t for t in ip_requests[client_ip] if now - t < 60]
+        
+        # Lockout if more than 20 requests per minute
+        if len(ip_requests[client_ip]) > 20:
+            print(f"🚨 Blocked spam IP: {client_ip}")
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please wait a moment."}
+            )
+            
+        ip_requests[client_ip].append(now)
+        
+    return await call_next(request)
 
 
 # ──────────────────────────────────────────────
