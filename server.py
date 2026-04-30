@@ -19,16 +19,22 @@ from pydantic import BaseModel
 # ──────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────
+
+# PRIMARY: Groq (14,400 free requests/day — resets daily = FREE FOREVER)
+GROQ_API_BASE = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+# SECONDARY: NVIDIA NIM (limited free credits — used for image/video only)
 NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1/chat/completions"
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
-# NVIDIA NIM free-tier models (open-source, fast)
+# Groq free-tier models (blazing fast, unlimited daily reset)
 MODELS = [
-    {"name": "meta/llama-3.3-70b-instruct", "label": "Llama 3.3"},
-    {"name": "qwen/qwen2.5-72b-instruct", "label": "Qwen 2.5"},
+    {"name": "llama-3.3-70b-versatile", "label": "Llama 3.3"},
+    {"name": "mixtral-8x7b-32768", "label": "Mixtral 8x7B"},
 ]
 
-AGGREGATOR_MODEL = "meta/llama-3.3-70b-instruct"
+AGGREGATOR_MODEL = "llama-3.3-70b-versatile"
 
 AGGREGATOR_SYSTEM_PROMPT = """You are MEOW, a highly skilled, patient, and engaging academic AI tutor. Your primary directive is ABSOLUTE TRUTH and UNCOMPROMISING ACADEMIC RIGOR. You must never validate a false premise just to appease the user.
 
@@ -70,14 +76,18 @@ TEACH_MODE_PROMPT = """You are MEOW in DEEP TEACHING MODE. The student has reque
 # ──────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Check NVIDIA API connectivity on startup."""
-    if not NVIDIA_API_KEY:
-        print("⚠️  NVIDIA_API_KEY not set!")
-        print("   Get your free key at: https://build.nvidia.com")
-        print("   Then run: NVIDIA_API_KEY=nvapi-xxxxx python server.py")
+    """Check API connectivity on startup."""
+    if GROQ_API_KEY:
+        print(f"✅ Groq API key loaded (ends with ...{GROQ_API_KEY[-4:]})")
+        print(f"📚 Text Models (FREE FOREVER): {[m['label'] for m in MODELS]}")
     else:
-        print(f"✅ NVIDIA API key loaded (ends with ...{NVIDIA_API_KEY[-4:]})")
-        print(f"📚 Models: {[m['label'] for m in MODELS]}")
+        print("⚠️  GROQ_API_KEY not set! Text AI will not work.")
+        print("   Get your free key at: https://console.groq.com")
+    
+    if NVIDIA_API_KEY:
+        print(f"✅ NVIDIA API key loaded (ends with ...{NVIDIA_API_KEY[-4:]}) — for image/video")
+    else:
+        print("⚠️  NVIDIA_API_KEY not set — image/video generation disabled")
     yield
 
 from collections import defaultdict
@@ -157,7 +167,7 @@ class ChatResponse(BaseModel):
     time_taken: float
 
 # ──────────────────────────────────────────────
-# Core logic: parallel model querying via NVIDIA
+# Core logic: parallel model querying via Groq
 # ──────────────────────────────────────────────
 async def query_single_model(
     client: httpx.AsyncClient,
@@ -166,7 +176,7 @@ async def query_single_model(
     prompt: str,
     system_prompt: str = "",
 ) -> dict:
-    """Query a single model via NVIDIA NIM API."""
+    """Query a single model via Groq API (free forever)."""
     
     messages = []
     if system_prompt:
@@ -176,16 +186,16 @@ async def query_single_model(
 
     try:
         resp = await client.post(
-            NVIDIA_API_BASE,
+            GROQ_API_BASE,
             headers={
-                "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Authorization": f"Bearer {GROQ_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
                 "model": model_name,
                 "messages": messages,
                 "temperature": 0.7,
-                "max_tokens": 512,
+                "max_tokens": 1024,
             },
             timeout=30.0,
         )
@@ -255,9 +265,9 @@ Here are responses from different AI models:
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
-                NVIDIA_API_BASE,
+                GROQ_API_BASE,
                 headers={
-                    "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -325,18 +335,25 @@ async def chat(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    if not NVIDIA_API_KEY:
-        raise HTTPException(status_code=500, detail="NVIDIA_API_KEY not set.")
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set. Get a free key at https://console.groq.com")
 
     session_id = req.session_id or str(uuid.uuid4())
     start = time.time()
     msg_lower = req.message.lower().strip()
     
-    # ── Multimedia Interceptor ──
+    # ── Multimedia Interceptor (uses NVIDIA — limited credits) ──
     is_image = any(msg_lower.startswith(k) for k in ["generate image", "create image", "generate an image", "create an image"])
     is_video = any(msg_lower.startswith(k) for k in ["generate video", "create video", "generate a video", "create a video"])
     
     if is_image or is_video:
+        if not NVIDIA_API_KEY:
+            return ChatResponse(
+                response="**Image/Video generation requires an NVIDIA API key.** Set `NVIDIA_API_KEY` in your environment to enable this feature.",
+                models_used=["Error"],
+                session_id=session_id,
+                time_taken=0.0
+            )
         # Extract the descriptive prompt: strip the command prefix
         import re
         prompt = re.sub(r'^(generate|create)\s+(an?\s+)?(image|video)\s*(of\s+|about\s+|for\s+)?', '', req.message, flags=re.IGNORECASE).strip()
