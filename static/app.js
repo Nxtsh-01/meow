@@ -51,6 +51,15 @@ async function init() {
         await loadSession(sessions[0].id);
     }
     
+    // Hide splash screen after a short delay
+    setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            splash.classList.add('hidden');
+            setTimeout(() => splash.remove(), 800); // Remove from DOM after fade out
+        }
+    }, 1500);
+    
     userInput.focus();
 }
 

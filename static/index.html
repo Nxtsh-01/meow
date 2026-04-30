@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>MEOW — AI Tutor</title>
     <meta name="description" content="MEOW: An elegant, minimal multi-model AI tutor.">
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#fdfaf6">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="MEOW">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,6 +22,14 @@
     <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
+
+<!-- ─── Splash Screen ─── -->
+<div id="splash-screen" class="splash-screen">
+    <div class="splash-content">
+        <div class="splash-title">MEOW</div>
+        <div class="splash-subtitle">created by Nitesh</div>
+    </div>
+</div>
 
 <!-- ─── Sidebar: Chat History ─── -->
 <aside id="sidebar" class="sidebar">
@@ -45,6 +60,10 @@
         </button>
         <div class="top-bar-title">MEOW</div>
         <div style="display: flex; gap: 8px;">
+            <button id="theme-toggle-btn" class="btn-icon" aria-label="Toggle dark/light theme" title="Toggle Theme">
+                <svg id="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
             <button id="export-pdf-btn" class="btn-icon" aria-label="Export Chat to PDF" onclick="exportChatToPDF()" title="Download PDF">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
@@ -96,5 +115,14 @@
 </main>
 
 <script src="app.js?v=4"></script>
+<script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker registered', reg))
+          .catch(err => console.log('Service Worker registration failed', err));
+      });
+    }
+</script>
 </body>
 </html>

@@ -49,7 +49,7 @@ body {
     font-family: var(--font-sans);
     background-color: var(--bg-main);
     color: var(--text-primary);
-    height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
     font-size: 15px;
@@ -88,6 +88,8 @@ button {
     padding: 8px;
     border-radius: var(--radius-sm);
     transition: background 0.15s, color 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
 }
 .btn-icon:hover {
     background: var(--bg-hover);
@@ -121,7 +123,7 @@ button {
     top: 0;
     left: calc(var(--sidebar-width) * -1);
     width: var(--sidebar-width);
-    height: 100vh;
+    height: 100dvh;
     background-color: var(--bg-main);
     border-right: 1px solid var(--border-light);
     z-index: 1000;
@@ -204,7 +206,7 @@ button {
 .app-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
     width: 100%;
     position: relative;
     max-width: 100%;
@@ -218,9 +220,9 @@ button {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    padding: max(12px, env(safe-area-inset-top)) 16px 12px 16px;
     z-index: 10;
-    background: linear-gradient(to bottom, var(--bg-main) 40%, transparent);
+    background: linear-gradient(to bottom, var(--bg-main) 60%, transparent);
 }
 
 .top-bar-title {
@@ -677,7 +679,7 @@ button {
     
     /* Ensure top-bar buttons are tappable */
     .top-bar {
-        padding: 10px 12px;
+        padding: max(10px, env(safe-area-inset-top)) 12px 10px 12px;
     }
     .btn-icon {
         min-width: 40px;
@@ -691,4 +693,48 @@ button {
     .message {
         gap: 10px;
     }
+}
+
+/* ─── Splash Screen ─── */
+.splash-screen {
+    position: fixed;
+    inset: 0;
+    background-color: var(--bg-main);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.8s ease-out, visibility 0.8s ease-out;
+}
+
+.splash-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.splash-content {
+    text-align: center;
+    transform: translateY(-20px);
+    animation: splashFadeIn 1s forwards ease-out;
+}
+
+@keyframes splashFadeIn {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.splash-title {
+    font-family: var(--font-serif);
+    font-size: 3.5rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    letter-spacing: -1px;
+    margin-bottom: 4px;
+}
+
+.splash-subtitle {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    color: var(--text-tertiary);
+    letter-spacing: 0.5px;
 }
