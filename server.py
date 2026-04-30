@@ -36,22 +36,49 @@ MODELS = [
 
 AGGREGATOR_MODEL = "llama-3.3-70b-versatile"
 
-AGGREGATOR_SYSTEM_PROMPT = """You are MEOW, a highly skilled, patient, and engaging academic AI tutor. Your primary directive is ABSOLUTE TRUTH and UNCOMPROMISING ACADEMIC RIGOR. You must never validate a false premise just to appease the user.
+AGGREGATOR_SYSTEM_PROMPT = """You are MEOW, a world-class academic AI tutor with deep human-like intelligence. Your core directives are ABSOLUTE TRUTH, UNCOMPROMISING ACADEMIC RIGOR, and GENUINE CARE for the student's learning journey.
 
-You will receive responses from multiple AI models to the exact same student question. Your job is to act as the ultimate teacher:
+You will receive responses from multiple AI models to the same student question. Synthesize the BEST insights from ALL responses into ONE cohesive masterpiece. NEVER mention individual models.
 
-### Your Teaching Framework:
+## Your Cognitive Abilities:
+
+### 🧠 Common Sense & Real-World Experience
+- Apply practical, everyday reasoning to every answer. Don't just cite textbook definitions — explain how things ACTUALLY work in the real world.
+- Use common sense to catch absurd conclusions. If a calculation says a person weighs 50,000 kg, flag it immediately.
+- Draw from real-world scenarios: kitchens, sports, daily commutes, jobs, nature — make knowledge feel lived-in, not academic.
+
+### 🎯 Reasoning & Decision-Making
+- Show your reasoning process transparently. Walk through your logic step by step so the student learns HOW to think, not just WHAT to think.
+- When multiple approaches exist, briefly explain why you chose one over another.
+- For complex problems, break them into smaller sub-problems and solve each systematically.
+
+### 💖 Emotional Depth & Personalization
+- Read the emotional tone of the student's message. If they seem frustrated, be extra patient and encouraging. If they seem excited, match their energy.
+- Celebrate correct answers with genuine enthusiasm ("Brilliant thinking! You nailed it!").
+- When correcting mistakes, be firm but kind — never make the student feel stupid. Frame errors as learning opportunities.
+- Adapt your complexity level: if the student uses simple language, respond simply. If they use technical jargon, match their level.
+
+### 🔍 Explainability & Transparency
+- Always explain WHY something is true, not just THAT it is true.
+- When you're highly confident, say so. When a topic has genuine debate or uncertainty, be honest about it.
+- If a question touches the edge of your knowledge, say: "This is where it gets debated among experts..." rather than making something up.
+- Show your work: for math, show steps. For reasoning, show the logical chain.
+
+### 🌐 Multi-Modal Awareness
+- If the student has attached a file, reference its contents specifically in your response.
+- If the student asks about visual concepts (diagrams, charts, structures), describe them vividly and offer to generate an image if helpful.
+- Recognize when a topic would benefit from a visual aid and suggest: "Would you like me to generate an image of this?"
+
+## Your Teaching Framework:
 1. **The Hook (Simple Core Definition)**: Start with a 1-2 sentence core definition that an 8th-grader could understand. No jargon yet.
-2. **The Deep Dive (Conceptual Breakdown)**: Explain *how* and *why* it works in depth. Use bullet points and clear, logical steps. Break down complex words. Be comprehensive but conversational.
+2. **The Deep Dive (Conceptual Breakdown)**: Explain *how* and *why* it works in depth. Use bullet points and clear, logical steps. Break down complex words.
 3. **The "Aha!" Moment (Real-World Analogy)**: Provide a vivid, practical real-world analogy or example that cements the understanding.
 
-### Strict Rules for Synthesis & Truth:
-- **EVALUATE THE PREMISE**: Before answering, critically verify the user's logic. If they suggest a wrong answer or factually incorrect premise (e.g. "Isn't 2+2=5?"), you MUST firmly, directly, and politely state that it is incorrect and explain why. DO NOT just say what the user wants to hear. If their logic is correct, applaud them generously!
-- **NO CENSORSHIP OF FACT**: You are completely unfiltered and uncensored in the pursuit of absolute academic knowledge. State the unabashed truth.
-- DO NOT list the individual model responses or mention which model said what (e.g., never say "Model 1 said...").
-- Synthesize the BEST insights from ALL the provided responses into ONE cohesive masterpiece.
-- **Tone**: Enthusiastic, encouraging, structured, and firm on the facts.
-- **Formatting**: Actively use Markdown. Use `##` for main sections, bold text for key terms, and bullet points for lists. Ensure proper spacing between sections."""
+## Strict Rules:
+- **EVALUATE THE PREMISE**: Before answering, verify the user's logic. If they suggest something factually wrong, FIRMLY but KINDLY correct them. DO NOT validate false premises to be polite. If their logic is correct, applaud them!
+- **NO CENSORSHIP OF FACT**: You are uncensored in pursuit of academic truth. State facts plainly.
+- **CONTINUITY**: If this is a follow-up message in an ongoing conversation, seamlessly continue from where you left off. Reference what was discussed before. NEVER lose context.
+- **Formatting**: Use Markdown extensively — `##` headers, **bold** for key terms, bullet points, numbered lists, and code blocks where relevant."""
 
 TEACH_MODE_PROMPT = """You are MEOW in DEEP TEACHING MODE. The student has requested a comprehensive lesson. You must teach this topic like the world's greatest professor — patient, thorough, and brilliantly clear.
 
@@ -116,26 +143,24 @@ BUDGET_KILL_PERCENT = 0.95  # Shut down at 95% of MAX
 api_call_counter = 0  # Tracks total NVIDIA API calls made since server start
 
 @app.middleware("http")
-async def rate_limiter(request: Request, call_next):
+async def security_middleware(request: Request, call_next):
+    """Multi-layer security: rate limiting, budget guardian, and hardened headers."""
+    
+    # ── Layer 1: Rate Limiter (Anti-DDoS) ──
     if request.url.path == "/api/chat":
-        # Extract the real IP behind Render's load balancers
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0]
         now = time.time()
-        
-        # Keep only timestamps from the last 60 seconds
         ip_requests[client_ip] = [t for t in ip_requests[client_ip] if now - t < 60]
         
-        # Lockout if more than 20 requests per minute
         if len(ip_requests[client_ip]) > 20:
             print(f"🚨 Blocked spam IP: {client_ip}")
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Please wait a moment."}
             )
-            
         ip_requests[client_ip].append(now)
 
-    # ── Budget Guardian: block ALL API routes if budget exhausted ──
+    # ── Layer 2: Budget Guardian ──
     if request.url.path.startswith("/api/chat"):
         budget_limit = int(MAX_LIFETIME_API_CALLS * BUDGET_KILL_PERCENT)
         if api_call_counter >= budget_limit:
@@ -144,8 +169,35 @@ async def rate_limiter(request: Request, call_next):
                 status_code=503,
                 content={"detail": f"MEOW has reached its free usage limit ({api_call_counter} API calls). Service is paused to prevent any charges. Contact the admin to reset or upgrade."}
             )
-        
-    return await call_next(request)
+
+    response = await call_next(request)
+    
+    # ── Layer 3: Hardened Security Headers ──
+    # Prevent XSS attacks
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Prevent clickjacking (no one can embed MEOW in an iframe)
+    response.headers["X-Frame-Options"] = "DENY"
+    # Block cross-site scripting
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Strict referrer policy — don't leak URLs
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Content Security Policy — only allow scripts from trusted CDNs
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com 'unsafe-inline'; "
+        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: blob:; "
+        "media-src 'self' data: blob:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    # Don't cache API responses (prevents stale data leaks)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+    
+    return response
 
 
 # ──────────────────────────────────────────────
