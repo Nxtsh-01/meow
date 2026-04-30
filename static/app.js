@@ -244,7 +244,9 @@ function renderMarkdown(text) {
     if (!text) return '';
     try {
         if (typeof marked !== 'undefined') {
-            return marked.parse(text, { breaks: true, gfm: true });
+            // Allow raw HTML so that <img>, <video>, <a download> from multimedia responses render correctly
+            marked.setOptions({ breaks: true, gfm: true });
+            return marked.parse(text);
         }
         return `<p>${escapeHtml(text)}</p>`;
     } catch (e) {
@@ -444,12 +446,16 @@ sidebarOverlay.addEventListener('click', closeSidebar);
 
 // 1. PDF Export
 window.exportChatToPDF = function() {
-    const element = document.getElementById('scroll-container');
+    const element = document.getElementById('messages-container');
+    if (!element || element.children.length === 0) {
+        alert('No messages to export yet!');
+        return;
+    }
     const opt = {
       margin:       0.5,
       filename:     'MEOW_Chat_Transcript.pdf',
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
+      html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
     html2pdf().set(opt).from(element).save();

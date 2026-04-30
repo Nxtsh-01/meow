@@ -615,6 +615,34 @@ button {
     text-align: center;
 }
 
+/* ─── Media Download Cards (for generated images/videos) ─── */
+.media-download-card {
+    margin-top: 12px;
+}
+.media-download-card img,
+.media-download-card video {
+    max-width: 100%;
+    border-radius: 12px;
+    box-shadow: var(--shadow-md);
+}
+.media-download-card a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 10px 20px;
+    background: var(--text-primary);
+    color: var(--bg-surface);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+.media-download-card a:hover {
+    background: #333;
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
     .sidebar {
@@ -627,5 +655,40 @@ button {
     }
     .message.user .message-content-wrapper {
         max-width: 95%;
+    }
+    
+    /* Mobile-friendly input bar */
+    .input-container {
+        padding: 0 10px 12px;
+    }
+    .input-wrapper {
+        padding: 6px 8px 6px 10px;
+        gap: 4px;
+    }
+    .action-btn {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+    }
+    .send-btn {
+        width: 32px;
+        height: 32px;
+    }
+    
+    /* Ensure top-bar buttons are tappable */
+    .top-bar {
+        padding: 10px 12px;
+    }
+    .btn-icon {
+        min-width: 40px;
+        min-height: 40px;
+    }
+    
+    /* Full-width messages */
+    .chat-area {
+        padding: 0 12px;
+    }
+    .message {
+        gap: 10px;
     }
 }

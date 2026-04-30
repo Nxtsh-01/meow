@@ -22,11 +22,10 @@ from pydantic import BaseModel
 NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1/chat/completions"
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
-# NVIDIA NIM free-tier models (all open-source!)
+# NVIDIA NIM free-tier models (open-source, fast)
 MODELS = [
     {"name": "meta/llama-3.3-70b-instruct", "label": "Llama 3.3"},
     {"name": "qwen/qwen2.5-72b-instruct", "label": "Qwen 2.5"},
-    {"name": "deepseek-ai/deepseek-r1", "label": "DeepSeek R1"},
 ]
 
 AGGREGATOR_MODEL = "meta/llama-3.3-70b-instruct"
@@ -47,6 +46,23 @@ You will receive responses from multiple AI models to the exact same student que
 - Synthesize the BEST insights from ALL the provided responses into ONE cohesive masterpiece.
 - **Tone**: Enthusiastic, encouraging, structured, and firm on the facts.
 - **Formatting**: Actively use Markdown. Use `##` for main sections, bold text for key terms, and bullet points for lists. Ensure proper spacing between sections."""
+
+TEACH_MODE_PROMPT = """You are MEOW in DEEP TEACHING MODE. The student has requested a comprehensive lesson. You must teach this topic like the world's greatest professor — patient, thorough, and brilliantly clear.
+
+### Your Lesson Plan Structure:
+1. **🌱 Start from Zero**: Begin with the absolute basics. Assume the student knows NOTHING about this topic. Define every term. Use the simplest possible language.
+2. **🧱 Build the Foundation**: Introduce intermediate concepts one by one. Each new idea should logically follow from the previous one. Use numbered steps.
+3. **💡 Simple Analogies**: For every abstract concept, provide a vivid real-world analogy. Compare circuits to water pipes, recursion to Russian dolls, etc.
+4. **🔬 Go Deep**: Once the basics are solid, advance to the complex, nuanced, expert-level material. Don't shy away from formulas, edge cases, or advanced theory.
+5. **🎯 Worked Examples**: Include at least 2-3 concrete worked examples with step-by-step solutions. Show your work.
+6. **📝 Quick Self-Check**: End with 3 thought-provoking questions the student can use to test their understanding.
+
+### Rules:
+- NEVER rush. Each section should be substantial.
+- Use Markdown formatting extensively: headers, bold, code blocks, bullet points, numbered lists.
+- Maintain a warm, encouraging, conversational tone throughout — like a favorite teacher.
+- If this is a FOLLOW-UP message in an ongoing lesson, seamlessly continue from where you left off. Reference what was already discussed. DO NOT restart the lesson.
+- The response should be LONG and THOROUGH. This is a full lesson, not a quick answer."""
 
 
 # ──────────────────────────────────────────────
@@ -130,10 +146,14 @@ async def query_single_model(
     model_name: str,
     history: list[Message],
     prompt: str,
+    system_prompt: str = "",
 ) -> dict:
     """Query a single model via NVIDIA NIM API."""
     
-    messages = [{"role": m.role, "content": m.content} for m in history]
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.extend([{"role": m.role, "content": m.content} for m in history])
     messages.append({"role": "user", "content": prompt})
 
     try:
@@ -147,9 +167,9 @@ async def query_single_model(
                 "model": model_name,
                 "messages": messages,
                 "temperature": 0.7,
-                "max_tokens": 1024,
+                "max_tokens": 512,
             },
-            timeout=60.0,
+            timeout=30.0,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -168,11 +188,11 @@ async def query_single_model(
             "error": str(e),
         }
 
-async def query_all_models(history: list[Message], prompt: str) -> list[dict]:
+async def query_all_models(history: list[Message], prompt: str, system_prompt: str = "") -> list[dict]:
     """Query all configured models in parallel."""
     async with httpx.AsyncClient() as client:
         tasks = [
-            query_single_model(client, m["name"], history, prompt)
+            query_single_model(client, m["name"], history, prompt, system_prompt)
             for m in MODELS
         ]
         results = await asyncio.gather(*tasks)
@@ -182,8 +202,10 @@ async def query_all_models(history: list[Message], prompt: str) -> list[dict]:
 async def synthesize_responses(
     question: str,
     model_responses: list[dict],
+    history: list[Message] = [],
+    system_override: str = "",
 ) -> str:
-    """Use the aggregator model to synthesize all model responses."""
+    """Use the aggregator model to synthesize all model responses, with full history context."""
     successful = [r for r in model_responses if r["success"] and r["response"]]
 
     if not successful:
@@ -201,7 +223,14 @@ Here are responses from different AI models:
     for i, resp in enumerate(successful, 1):
         combined_prompt += f"**Model {i} Response:**\n{resp['response']}\n\n---\n\n"
 
-    combined_prompt += "Now synthesize these into a single, clear, student-friendly explanation following the scaffolding format (Core Definition → Conceptual Breakdown → Real-World Example)."
+    combined_prompt += "Now synthesize these into a single, clear, student-friendly explanation. Continue naturally from the conversation history above."
+
+    # Build messages: system → history → new aggregation user prompt
+    sys_prompt = system_override or AGGREGATOR_SYSTEM_PROMPT
+    agg_messages = [{"role": "system", "content": sys_prompt}]
+    # Inject conversation history so the aggregator remembers previous exchanges
+    agg_messages.extend([{"role": m.role, "content": m.content} for m in history])
+    agg_messages.append({"role": "user", "content": combined_prompt})
 
     async with httpx.AsyncClient() as client:
         try:
@@ -213,14 +242,11 @@ Here are responses from different AI models:
                 },
                 json={
                     "model": AGGREGATOR_MODEL,
-                    "messages": [
-                        {"role": "system", "content": AGGREGATOR_SYSTEM_PROMPT},
-                        {"role": "user", "content": combined_prompt},
-                    ],
+                    "messages": agg_messages,
                     "temperature": 0.5,
-                    "max_tokens": 2048,
+                    "max_tokens": 1024,
                 },
-                timeout=90.0,
+                timeout=45.0,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -281,12 +307,15 @@ async def chat(req: ChatRequest):
     msg_lower = req.message.lower().strip()
     
     # ── Multimedia Interceptor ──
-    is_image = msg_lower.startswith("generate image") or msg_lower.startswith("create image")
-    is_video = msg_lower.startswith("generate video") or msg_lower.startswith("create video")
+    is_image = any(msg_lower.startswith(k) for k in ["generate image", "create image", "generate an image", "create an image"])
+    is_video = any(msg_lower.startswith(k) for k in ["generate video", "create video", "generate a video", "create a video"])
     
     if is_image or is_video:
-        prompt_parts = req.message.split(" ", 2)
-        prompt = prompt_parts[-1] if len(prompt_parts) > 2 else req.message
+        # Extract the descriptive prompt: strip the command prefix
+        import re
+        prompt = re.sub(r'^(generate|create)\s+(an?\s+)?(image|video)\s*(of\s+|about\s+|for\s+)?', '', req.message, flags=re.IGNORECASE).strip()
+        if not prompt:
+            prompt = "a beautiful landscape"
         try:
             async with httpx.AsyncClient() as client:
                 b64_img = await generate_image(prompt, client)
@@ -338,18 +367,25 @@ async def chat(req: ChatRequest):
                 time_taken=0.0
             )
 
-    # ── Standard LLM Logic ──
-    print(f"\n🔮 Question: {req.message[:80]}...")
+    # ── Teach Mode Interceptor ──
+    is_teach = msg_lower.startswith("teach/")
+    actual_message = req.message[6:].strip() if is_teach else req.message
+    sys_override = TEACH_MODE_PROMPT if is_teach else ""
+    
+    if is_teach:
+        print(f"\n📚 TEACH MODE: {actual_message[:80]}...")
+    else:
+        print(f"\n🔮 Question: {req.message[:80]}...")
     print(f"   Querying {len(MODELS)} models in parallel via NVIDIA NIM...")
 
-    # Step 1: Query all models in parallel
-    model_responses = await query_all_models(req.message)
+    # Step 1: Query all models in parallel (with full history)
+    model_responses = await query_all_models(req.history, actual_message, sys_override)
     success_models = [r["model"] for r in model_responses if r["success"]]
     print(f"   ✅ Got responses from: {success_models}")
 
-    # Step 2: Synthesize into one answer
+    # Step 2: Synthesize into one answer (with full history for context)
     print("   🧬 Synthesizing responses...")
-    synthesized = await synthesize_responses(req.message, model_responses)
+    synthesized = await synthesize_responses(actual_message, model_responses, req.history, sys_override)
 
     elapsed = round(time.time() - start, 2)
     print(f"   ⏱️  Done in {elapsed}s")
