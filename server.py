@@ -97,6 +97,14 @@ app.add_middleware(
 # 2. Anti-DDoS Rate Limiter: Prevent automated scripts from draining the API key
 ip_requests = defaultdict(list)
 
+# 3. BUDGET GUARDIAN — Hard kill-switch to prevent ANY paid usage
+#    NVIDIA free tier gives ~5000 credits. Each chat = ~3 API calls (2 models + aggregator).
+#    We set MAX at 4500 (90% of 5000) and KILL at 95% of MAX = 4275.
+#    This means MEOW auto-shuts-down with ~725 credits still remaining. ZERO risk of charges.
+MAX_LIFETIME_API_CALLS = int(os.environ.get("MAX_API_CALLS", "4500"))
+BUDGET_KILL_PERCENT = 0.95  # Shut down at 95% of MAX
+api_call_counter = 0  # Tracks total NVIDIA API calls made since server start
+
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next):
     if request.url.path == "/api/chat":
@@ -116,6 +124,16 @@ async def rate_limiter(request: Request, call_next):
             )
             
         ip_requests[client_ip].append(now)
+
+    # ── Budget Guardian: block ALL API routes if budget exhausted ──
+    if request.url.path.startswith("/api/chat"):
+        budget_limit = int(MAX_LIFETIME_API_CALLS * BUDGET_KILL_PERCENT)
+        if api_call_counter >= budget_limit:
+            print(f"🛑 BUDGET GUARDIAN: {api_call_counter}/{MAX_LIFETIME_API_CALLS} calls used. SERVICE LOCKED.")
+            return JSONResponse(
+                status_code=503,
+                content={"detail": f"MEOW has reached its free usage limit ({api_call_counter} API calls). Service is paused to prevent any charges. Contact the admin to reset or upgrade."}
+            )
         
     return await call_next(request)
 
@@ -174,6 +192,8 @@ async def query_single_model(
         resp.raise_for_status()
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
+        global api_call_counter
+        api_call_counter += 1
         return {
             "model": model_name,
             "response": content,
@@ -250,6 +270,8 @@ Here are responses from different AI models:
             )
             resp.raise_for_status()
             data = resp.json()
+            global api_call_counter
+            api_call_counter += 1
             return data["choices"][0]["message"]["content"]
         except Exception as e:
             print(f"  ⚠️  Aggregation failed: {e}. Using best individual response.")
@@ -269,6 +291,8 @@ async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
         timeout=60.0
     )
     resp.raise_for_status()
+    global api_call_counter
+    api_call_counter += 1
     data = resp.json()
     b64 = data.get("image") or (data.get("artifacts") and data["artifacts"][0].get("base64"))
     if not b64:
@@ -284,6 +308,8 @@ async def generate_video(b64_image: str, client: httpx.AsyncClient) -> str:
         timeout=180.0
     )
     resp.raise_for_status()
+    global api_call_counter
+    api_call_counter += 1
     data = resp.json()
     b64_vid = data.get("video") or (data.get("artifacts") and data["artifacts"][0].get("base64"))
     if not b64_vid:
@@ -406,12 +432,20 @@ async def chat(req: ChatRequest):
 
 @app.get("/api/health")
 async def health():
-    """Health check."""
+    """Health check with budget status."""
+    budget_limit = int(MAX_LIFETIME_API_CALLS * BUDGET_KILL_PERCENT)
     return {
-        "status": "ok",
+        "status": "ok" if api_call_counter < budget_limit else "BUDGET_EXHAUSTED",
         "api": "nvidia_nim",
         "key_set": bool(NVIDIA_API_KEY),
         "models": [m["name"] for m in MODELS],
+        "budget": {
+            "calls_used": api_call_counter,
+            "kill_at": budget_limit,
+            "max_lifetime": MAX_LIFETIME_API_CALLS,
+            "remaining": max(0, budget_limit - api_call_counter),
+            "percent_used": round((api_call_counter / budget_limit) * 100, 1) if budget_limit > 0 else 0,
+        }
     }
 
 
