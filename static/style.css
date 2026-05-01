@@ -104,8 +104,6 @@ button {
     padding: 8px;
     border-radius: var(--radius-sm);
     transition: background 0.15s, color 0.15s;
-    -webkit-appearance: none;
-    appearance: none;
 }
 .btn-icon:hover {
     background: var(--bg-hover);
@@ -220,15 +218,21 @@ body.dark-theme .history-item.active {
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
-    opacity: 0;
+    opacity: 1; /* Always visible by default (for mobile) */
     transition: opacity 0.2s, background 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.history-item-wrapper:hover .history-delete-btn {
-    opacity: 1;
+/* Hide on desktop until hovered */
+@media (hover: hover) {
+    .history-delete-btn {
+        opacity: 0;
+    }
+    .history-item-wrapper:hover .history-delete-btn {
+        opacity: 1;
+    }
 }
 
 .history-delete-btn:hover {
