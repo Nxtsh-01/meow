@@ -45,6 +45,14 @@ async function init() {
     await cleanupOldSessions();
     await refreshHistorySidebar();
     
+    // Load theme from localStorage
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-theme');
+        document.getElementById('theme-icon-sun').style.display = 'block';
+        document.getElementById('theme-icon-moon').style.display = 'none';
+    }
+    
     // Auto-load most recent session if available
     const sessions = await getAllSessions();
     if (sessions.length > 0 && currentMessages.length === 0) {
@@ -397,12 +405,35 @@ async function refreshHistorySidebar() {
     }
 
     historyList.innerHTML = sessions.map(s => `
-        <div class="history-item ${s.id === currentSessionId ? 'active' : ''}"
-             onclick="loadSession('${s.id}')"
-             title="${escapeHtml(s.title)}">
-            ${escapeHtml(s.title)}
+        <div class="history-item-wrapper">
+            <div class="history-item ${s.id === currentSessionId ? 'active' : ''}"
+                 onclick="loadSession('${s.id}')"
+                 title="${escapeHtml(s.title)}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">
+                ${escapeHtml(s.title)}
+            </div>
+            <button class="history-delete-btn" onclick="deleteSession('${s.id}', event)" title="Delete Chat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
         </div>
     `).join('');
+}
+
+async function deleteSession(id, event) {
+    event.stopPropagation(); // Prevent loading the session when clicking delete
+    if (!db) return;
+    
+    if (confirm("Are you sure you want to delete this chat?")) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(id);
+        
+        tx.oncomplete = () => {
+            if (currentSessionId === id) {
+                startNewChat();
+            } else {
+                refreshHistorySidebar();
+            }
+        };
+    }
 }
 
 // ──────────────────────────────────────────────
@@ -448,6 +479,27 @@ newChatSidebarBtn.addEventListener('click', startNewChat);
 sidebarToggle.addEventListener('click', openSidebar);
 sidebarClose.addEventListener('click', closeSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
+
+// Theme Toggling
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const themeIconSun = document.getElementById('theme-icon-sun');
+const themeIconMoon = document.getElementById('theme-icon-moon');
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        document.body.classList.toggle('dark-theme');
+        const isDark = document.body.classList.contains('dark-theme');
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        
+        if (isDark) {
+            themeIconSun.style.display = 'block';
+            themeIconMoon.style.display = 'none';
+        } else {
+            themeIconSun.style.display = 'none';
+            themeIconMoon.style.display = 'block';
+        }
+    });
+}
 
 // ──────────────────────────────────────────────
 // Phase 3 Features: Voice, File Parsing, PDF Export

@@ -32,9 +32,10 @@ NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 MODELS = [
     {"name": "llama-3.3-70b-versatile", "label": "Llama 3.3"},
     {"name": "mixtral-8x7b-32768", "label": "Mixtral 8x7B"},
+    {"name": "deepseek-r1-distill-llama-70b", "label": "DeepSeek R1"},
 ]
 
-AGGREGATOR_MODEL = "llama-3.3-70b-versatile"
+AGGREGATOR_MODEL = "deepseek-r1-distill-llama-70b"
 
 AGGREGATOR_SYSTEM_PROMPT = """You are MEOW, a world-class academic AI tutor with deep human-like intelligence. Your core directives are ABSOLUTE TRUTH, UNCOMPROMISING ACADEMIC RIGOR, and GENUINE CARE for the student's learning journey.
 
