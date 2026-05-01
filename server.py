@@ -475,13 +475,35 @@ async def chat(req: ChatRequest):
                 time_taken=0.0
             )
 
-    # ── Teach Mode Interceptor ──
+    # ── Interceptors ──
     is_teach = msg_lower.startswith("teach/")
-    actual_message = req.message[6:].strip() if is_teach else req.message
-    sys_override = TEACH_MODE_PROMPT if is_teach else ""
+    is_search = msg_lower.startswith("/search")
+    is_flashcards = msg_lower == "/flashcards" or msg_lower == "generate flashcards"
     
+    actual_message = req.message
+    sys_override = ""
+
     if is_teach:
+        actual_message = req.message[6:].strip()
+        sys_override = TEACH_MODE_PROMPT
         print(f"\n📚 TEACH MODE: {actual_message[:80]}...")
+    elif is_search:
+        search_query = req.message[7:].strip()
+        print(f"\n🌐 WEB SEARCH: {search_query}")
+        if search_query:
+            try:
+                from duckduckgo_search import DDGS
+                results = DDGS().text(search_query, max_results=3)
+                search_context = "\n".join([f"- {r['title']}: {r['body']} ({r['href']})" for r in results])
+                actual_message = f"User asked: '{search_query}'. Here are the live Web Search results:\n{search_context}\n\nPlease synthesize a comprehensive answer using these results and cite the URLs."
+            except ImportError:
+                actual_message = req.message + "\n\n(Note: Web search failed: duckduckgo-search package not installed)"
+            except Exception as e:
+                actual_message = req.message + f"\n\n(Note: Web search failed: {str(e)})"
+    elif is_flashcards:
+        print("\n🗂️ FLASHCARD GENERATOR")
+        actual_message = "Analyze the conversation history. Identify the key concepts discussed. Generate exactly 5 highly effective study flashcards. You MUST output them using native HTML details and summary tags like this:\n<details class='flashcard'><summary>Question or Concept</summary><div class='flashcard-content'>Answer or Definition</div></details>\nDo not output anything else, no intros or outros. Do not wrap in markdown code blocks."
+        sys_override = "You are a Flashcard Generator. Output ONLY HTML <details> tags. Do not wrap in markdown blocks."
     else:
         print(f"\n🔮 Question: {req.message[:80]}...")
     print(f"   Querying {len(MODELS)} models in parallel via NVIDIA NIM...")

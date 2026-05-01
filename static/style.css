@@ -675,6 +675,60 @@ body.dark-theme .history-item.active {
     opacity: 0.8;
 }
 
+/* ─── Interactive Flashcards ─── */
+details.flashcard {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-top: 12px;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    transition: box-shadow 0.2s, background 0.2s;
+}
+details.flashcard:hover {
+    box-shadow: var(--shadow-md);
+    background: var(--bg-hover);
+}
+details.flashcard summary {
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+    list-style: none; /* Hide default arrow */
+    outline: none;
+    position: relative;
+    padding-left: 24px;
+}
+details.flashcard summary::-webkit-details-marker {
+    display: none;
+}
+details.flashcard summary::before {
+    content: "▶";
+    position: absolute;
+    left: 0;
+    top: 2px;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    transition: transform 0.2s;
+}
+details.flashcard[open] summary::before {
+    transform: rotate(90deg);
+}
+details.flashcard[open] summary {
+    margin-bottom: 12px;
+    border-bottom: 1px dashed var(--border-light);
+    padding-bottom: 8px;
+}
+.flashcard-content {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    animation: fadeIn 0.3s ease-in-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* ─── Media Download Cards (for generated images/videos) ─── */
 .media-download-card {
     margin-top: 12px;

@@ -230,6 +230,24 @@ function addMessageToUI(role, content) {
     msgDiv.appendChild(wrapper);
     messagesContainer.appendChild(msgDiv);
     
+    // Trigger syntax highlighting
+    if (window.Prism) {
+        Prism.highlightAllUnder(bubble);
+    }
+    
+    // Trigger math rendering
+    if (window.renderMathInElement) {
+        renderMathInElement(bubble, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false},
+                {left: '\\(', right: '\\)', display: false},
+                {left: '\\[', right: '\\]', display: true}
+            ],
+            throwOnError: false
+        });
+    }
+
     setTimeout(scrollToBottom, 50);
 }
 
