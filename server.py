@@ -396,9 +396,25 @@ async def chat(req: ChatRequest):
     msg_lower = req.message.lower().strip()
     
     # ── Multimedia Interceptor (uses NVIDIA — limited credits) ──
-    is_image = any(msg_lower.startswith(k) for k in ["generate image", "create image", "generate an image", "create an image"])
-    is_video = any(msg_lower.startswith(k) for k in ["generate video", "create video", "generate a video", "create a video"])
+    import re
+    media_match = re.match(
+        r'^(?:please\s+|can you\s+|could you\s+|meow,?\s+|will you\s+)*(generate|create|make|draw|show me)\s+(?:an?\s+|some\s+)?(image|picture|photo|video|animation)s?\s*(?:of\s+|about\s+|for\s+)?(.*)', 
+        msg_lower, 
+        flags=re.IGNORECASE
+    )
     
+    is_image = False
+    is_video = False
+    prompt = "a beautiful landscape"
+    
+    if media_match:
+        action, media_type, target = media_match.groups()
+        if media_type in ['video', 'animation']:
+            is_video = True
+        else:
+            is_image = True
+        prompt = target.strip() or prompt
+        
     if is_image or is_video:
         if not NVIDIA_API_KEY:
             return ChatResponse(
@@ -407,11 +423,7 @@ async def chat(req: ChatRequest):
                 session_id=session_id,
                 time_taken=0.0
             )
-        # Extract the descriptive prompt: strip the command prefix
-        import re
-        prompt = re.sub(r'^(generate|create)\s+(an?\s+)?(image|video)\s*(of\s+|about\s+|for\s+)?', '', req.message, flags=re.IGNORECASE).strip()
-        if not prompt:
-            prompt = "a beautiful landscape"
+
         try:
             async with httpx.AsyncClient() as client:
                 b64_img = await generate_image(prompt, client)
