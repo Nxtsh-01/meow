@@ -368,48 +368,31 @@ Here are responses from different AI models:
 # Multimedia Pipelines
 # ──────────────────────────────────────────────
 
-# PRIMARY: Pollinations.ai — 100% FREE, no API key needed, unlimited
-async def generate_image_free(prompt: str, client: httpx.AsyncClient) -> str:
+# PRIMARY (and only): Pollinations.ai — 100% FREE, no API key needed, unlimited
+async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
     """Generate image using Pollinations.ai (completely free, no API key)."""
     import urllib.parse
-    encoded_prompt = urllib.parse.quote(prompt)
-    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&nologo=true"
-    print(f"   🖼️ Generating image via Pollinations.ai: {prompt}")
-    
-    resp = await client.get(image_url, timeout=60.0, follow_redirects=True)
-    resp.raise_for_status()
-    
     import base64
-    b64 = base64.b64encode(resp.content).decode("utf-8")
-    return b64
-
-# FALLBACK: NVIDIA (only if API key is set and has credits)
-async def generate_image_nvidia(prompt: str, client: httpx.AsyncClient) -> str:
-    print(f"   🖼️ Generating Image via NVIDIA SD3: {prompt}")
-    resp = await client.post(
-        "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
-        headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
-        json={"prompt": prompt, "aspect_ratio": "16:9", "output_format": "jpeg"},
-        timeout=60.0
-    )
+    
+    encoded_prompt = urllib.parse.quote(prompt)
+    # Use seed for variety, nologo to keep it clean
+    seed = int(time.time()) % 100000
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&seed={seed}&nologo=true"
+    print(f"   🖼️ Generating image via Pollinations.ai: {prompt}")
+    print(f"   🔗 URL: {image_url}")
+    
+    # Pollinations can take a moment to generate — give it plenty of time
+    resp = await client.get(image_url, timeout=90.0, follow_redirects=True)
     resp.raise_for_status()
-    global api_call_counter
-    api_call_counter += 1
-    data = resp.json()
-    b64 = data.get("image") or (data.get("artifacts") and data["artifacts"][0].get("base64"))
-    if not b64:
-        raise Exception("NVIDIA API did not return image data.")
+    
+    # Verify we actually got an image back (not an error page)
+    content_type = resp.headers.get("content-type", "")
+    if "image" not in content_type and len(resp.content) < 1000:
+        raise Exception(f"Pollinations returned non-image response: {content_type}")
+    
+    b64 = base64.b64encode(resp.content).decode("utf-8")
+    print(f"   ✅ Image generated successfully ({len(b64)} bytes base64)")
     return b64
-
-async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
-    """Try free Pollinations first, fall back to NVIDIA if it fails."""
-    try:
-        return await generate_image_free(prompt, client)
-    except Exception as e:
-        print(f"   ⚠️ Pollinations failed: {e}. Trying NVIDIA fallback...")
-        if NVIDIA_API_KEY:
-            return await generate_image_nvidia(prompt, client)
-        raise Exception("Image generation failed. Please try again.")
 
 async def generate_video(b64_image: str, client: httpx.AsyncClient) -> str:
     print("   🎞️ Animating Image frame via SVD...")
