@@ -451,21 +451,72 @@ async def chat(req: ChatRequest):
     start = time.time()
     msg_lower = req.message.lower().strip()
     
-    # ── Multimedia Interceptor (uses NVIDIA — limited credits) ──
+    # ── Multimedia Interceptor (FREE via Pollinations.ai) ──
     import re
-    media_match = re.match(
-        r'^(?:please\s+|can you\s+|could you\s+|meow,?\s+|will you\s+)*(generate|create|make|draw|show me)\s+(?:an?\s+|some\s+)?(image|picture|photo|video|animation)s?\s*(?:of\s+|about\s+|for\s+)?(.*)', 
-        msg_lower, 
-        flags=re.IGNORECASE
-    )
     
     is_image = False
     is_video = False
     prompt = "a beautiful landscape"
     
+    # Pattern 1: Action-first ("generate an image of...", "draw a picture of...")
+    media_match = re.match(
+        r'^(?:please\s+|can you\s+|could you\s+|meow,?\s+|will you\s+|i want you to\s+|i need you to\s+)*'
+        r'(generate|create|make|draw|paint|render|produce|show me|give me|i want|i need)\s+'
+        r'(?:an?\s+|some\s+|the\s+|me\s+)?'
+        r'(image|picture|photo|photograph|illustration|artwork|drawing|painting|video|animation|clip)\s*'
+        r'(?:of\s+|about\s+|for\s+|showing\s+|with\s+|depicting\s+)?'
+        r'(.*)',
+        msg_lower, flags=re.IGNORECASE
+    )
+    
+    # Pattern 2: Noun-first ("image of a cat", "picture of sunset")
+    if not media_match:
+        media_match = re.match(
+            r'^(?:an?\s+)?(image|picture|photo|photograph|illustration|drawing|painting|video|animation)\s+'
+            r'(?:of\s+|about\s+|showing\s+|depicting\s+|with\s+)'
+            r'(.*)',
+            msg_lower, flags=re.IGNORECASE
+        )
+        if media_match:
+            media_type, target = media_match.groups()
+            if media_type in ['video', 'animation', 'clip']:
+                is_video = True
+            else:
+                is_image = True
+            prompt = target.strip() or prompt
+            media_match = None  # Prevent double-processing below
+    
+    # Pattern 3: Keyword scan fallback — catches anything with "generate" + "image" anywhere
+    if not media_match and not is_image and not is_video:
+        image_keywords = ['image', 'picture', 'photo', 'illustration', 'drawing', 'painting', 'artwork']
+        video_keywords = ['video', 'animation', 'clip']
+        action_keywords = ['generate', 'create', 'make', 'draw', 'paint', 'render', 'produce', 'show']
+        
+        has_action = any(k in msg_lower for k in action_keywords)
+        has_image = any(k in msg_lower for k in image_keywords)
+        has_video = any(k in msg_lower for k in video_keywords)
+        
+        if has_action and (has_image or has_video):
+            if has_video:
+                is_video = True
+            else:
+                is_image = True
+            # Extract prompt by stripping common words
+            prompt = re.sub(
+                r'\b(please|can you|could you|will you|generate|create|make|draw|paint|render|produce|show me|give me|'
+                r'i want|i need|an?|the|some|image|picture|photo|photograph|illustration|drawing|painting|artwork|'
+                r'video|animation|clip|of|about|for|showing|depicting|with|me)\b',
+                '', msg_lower, flags=re.IGNORECASE
+            ).strip()
+            prompt = re.sub(r'\s+', ' ', prompt).strip() or "a beautiful landscape"
+    
     if media_match:
-        action, media_type, target = media_match.groups()
-        if media_type in ['video', 'animation']:
+        groups = media_match.groups()
+        if len(groups) == 3:
+            action, media_type, target = groups
+        else:
+            media_type, target = groups[0], groups[-1]
+        if media_type in ['video', 'animation', 'clip']:
             is_video = True
         else:
             is_image = True
