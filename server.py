@@ -582,12 +582,25 @@ async def chat(req: ChatRequest):
         print(f"\n🌐 WEB SEARCH: {search_query}")
         if search_query:
             try:
-                from duckduckgo_search import DDGS
-                results = DDGS().text(search_query, max_results=3)
-                search_context = "\n".join([f"- {r['title']}: {r['body']} ({r['href']})" for r in results])
-                actual_message = f"User asked: '{search_query}'. Here are the live Web Search results:\n{search_context}\n\nPlease synthesize a comprehensive answer using these results and cite the URLs."
-            except ImportError:
-                actual_message = req.message + "\n\n(Note: Web search failed: duckduckgo-search package not installed)"
+                import urllib.parse
+                encoded_q = urllib.parse.quote(search_query)
+                async with httpx.AsyncClient() as search_client:
+                    resp = await search_client.get(
+                        f"https://api.duckduckgo.com/?q={encoded_q}&format=json&no_html=1&skip_disambig=1",
+                        timeout=10.0
+                    )
+                    data = resp.json()
+                    results = []
+                    if data.get("Abstract"):
+                        results.append(f"- {data['Heading']}: {data['Abstract']} ({data.get('AbstractURL', '')})")
+                    for topic in data.get("RelatedTopics", [])[:3]:
+                        if isinstance(topic, dict) and topic.get("Text"):
+                            results.append(f"- {topic['Text']} ({topic.get('FirstURL', '')})")
+                    if results:
+                        search_context = "\n".join(results)
+                        actual_message = f"User asked: '{search_query}'. Here are the Web Search results:\n{search_context}\n\nPlease synthesize a comprehensive answer using these results and cite the URLs."
+                    else:
+                        actual_message = f"User asked: '{search_query}'. Web search returned no results. Please answer based on your knowledge and clearly state you couldn't find live results."
             except Exception as e:
                 actual_message = req.message + f"\n\n(Note: Web search failed: {str(e)})"
     elif is_flashcards:
