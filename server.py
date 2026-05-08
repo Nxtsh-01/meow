@@ -102,9 +102,25 @@ TEACH_MODE_PROMPT = """You are MEOW in DEEP TEACHING MODE. The student has reque
 # ──────────────────────────────────────────────
 # App setup
 # ──────────────────────────────────────────────
+# ── Keep-Alive Self-Ping (prevents Render free tier from sleeping) ──
+KEEP_ALIVE_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://meow-blq7.onrender.com")
+
+async def keep_alive_ping():
+    """Ping ourselves every 10 minutes so Render never puts the server to sleep."""
+    await asyncio.sleep(30)  # Wait for server to fully start
+    print("💓 Keep-alive started — pinging every 10 minutes")
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                resp = await client.get(f"{KEEP_ALIVE_URL}/health", timeout=10)
+                print(f"💓 Keep-alive ping: {resp.status_code}")
+            except Exception as e:
+                print(f"💓 Keep-alive ping failed: {e}")
+            await asyncio.sleep(600)  # 10 minutes
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Check API connectivity on startup."""
+    """Check API connectivity on startup and start keep-alive."""
     if GROQ_API_KEY:
         print(f"✅ Groq API key loaded (ends with ...{GROQ_API_KEY[-4:]})")
         print(f"📚 Text Models (FREE FOREVER): {[m['label'] for m in MODELS]}")
@@ -116,7 +132,13 @@ async def lifespan(app: FastAPI):
         print(f"✅ NVIDIA API key loaded (ends with ...{NVIDIA_API_KEY[-4:]}) — for image/video")
     else:
         print("⚠️  NVIDIA_API_KEY not set — image/video generation disabled")
+    
+    # Start keep-alive background task
+    ping_task = asyncio.create_task(keep_alive_ping())
+    print("🚀 MEOW server is live and will stay awake!")
     yield
+    # Cleanup on shutdown
+    ping_task.cancel()
 
 from collections import defaultdict
 from fastapi import Request
@@ -382,6 +404,11 @@ async def generate_video(b64_image: str, client: httpx.AsyncClient) -> str:
 # ──────────────────────────────────────────────
 # API endpoints
 # ──────────────────────────────────────────────
+@app.get("/health")
+async def health_check():
+    """Lightweight health check for keep-alive pings and monitoring."""
+    return {"status": "alive", "uptime": time.time()}
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Main chat endpoint — intercepts multimedia or queries models in parallel."""
