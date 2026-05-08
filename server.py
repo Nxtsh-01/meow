@@ -365,10 +365,27 @@ Here are responses from different AI models:
 
 
 # ──────────────────────────────────────────────
-# Multimedia Pipelines (NVIDIA stable-diffusion & stable-video)
+# Multimedia Pipelines
 # ──────────────────────────────────────────────
-async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
-    print(f"   🖼️ Generating Image bounds via SD3: {prompt}")
+
+# PRIMARY: Pollinations.ai — 100% FREE, no API key needed, unlimited
+async def generate_image_free(prompt: str, client: httpx.AsyncClient) -> str:
+    """Generate image using Pollinations.ai (completely free, no API key)."""
+    import urllib.parse
+    encoded_prompt = urllib.parse.quote(prompt)
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&nologo=true"
+    print(f"   🖼️ Generating image via Pollinations.ai: {prompt}")
+    
+    resp = await client.get(image_url, timeout=60.0, follow_redirects=True)
+    resp.raise_for_status()
+    
+    import base64
+    b64 = base64.b64encode(resp.content).decode("utf-8")
+    return b64
+
+# FALLBACK: NVIDIA (only if API key is set and has credits)
+async def generate_image_nvidia(prompt: str, client: httpx.AsyncClient) -> str:
+    print(f"   🖼️ Generating Image via NVIDIA SD3: {prompt}")
     resp = await client.post(
         "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
         headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
@@ -384,8 +401,20 @@ async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
         raise Exception("NVIDIA API did not return image data.")
     return b64
 
+async def generate_image(prompt: str, client: httpx.AsyncClient) -> str:
+    """Try free Pollinations first, fall back to NVIDIA if it fails."""
+    try:
+        return await generate_image_free(prompt, client)
+    except Exception as e:
+        print(f"   ⚠️ Pollinations failed: {e}. Trying NVIDIA fallback...")
+        if NVIDIA_API_KEY:
+            return await generate_image_nvidia(prompt, client)
+        raise Exception("Image generation failed. Please try again.")
+
 async def generate_video(b64_image: str, client: httpx.AsyncClient) -> str:
     print("   🎞️ Animating Image frame via SVD...")
+    if not NVIDIA_API_KEY:
+        raise Exception("Video generation requires an NVIDIA API key with available credits.")
     resp = await client.post(
         "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-video-diffusion",
         headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"},
@@ -443,10 +472,10 @@ async def chat(req: ChatRequest):
         prompt = target.strip() or prompt
         
     if is_image or is_video:
-        if not NVIDIA_API_KEY:
+        if is_video and not NVIDIA_API_KEY:
             return ChatResponse(
-                response="**Image/Video generation requires an NVIDIA API key.** Set `NVIDIA_API_KEY` in your environment to enable this feature.",
-                models_used=["Error"],
+                response="**Video generation requires an NVIDIA API key with available credits.** Image generation is free — try asking me to generate an image instead!",
+                models_used=["Info"],
                 session_id=session_id,
                 time_taken=0.0
             )
@@ -485,7 +514,7 @@ async def chat(req: ChatRequest):
     </a>
 </div>
 """
-                    used = ["Stable Diffusion 3"]
+                    used = ["Pollinations AI"]
                     
             elapsed = round(time.time() - start, 2)
             return ChatResponse(
@@ -496,7 +525,7 @@ async def chat(req: ChatRequest):
             )
         except Exception as e:
             return ChatResponse(
-                response=f"**Multimedia Generation Failed:** \n\n```text\n{str(e)}\n```\nMake sure your NVIDIA API key permits generative visual models.",
+                response=f"**Multimedia Generation Failed:** \n\n```text\n{str(e)}\n```\nPlease try again in a moment.",
                 models_used=["Error"],
                 session_id=session_id,
                 time_taken=0.0
