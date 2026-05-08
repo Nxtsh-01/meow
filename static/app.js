@@ -319,8 +319,11 @@ async function sendMessage() {
             .filter(msg => msg.role !== 'system')
             .map(msg => ({
                 role: msg.role === 'ai' ? 'assistant' : 'user',
-                content: msg.content
-            }));
+                content: msg.content.length > 5000 
+                    ? msg.content.substring(0, 500) + '\n\n[Content truncated for context efficiency]'
+                    : msg.content
+            }))
+            .slice(-10); // Only send last 10 messages to prevent overload
             
         const resp = await fetch(API_URL, {
             method: 'POST',
