@@ -270,9 +270,9 @@ async def query_single_model(
                 "model": model_name,
                 "messages": messages,
                 "temperature": 0.7,
-                "max_tokens": 1024,
+                "max_tokens": 4096,
             },
-            timeout=30.0,
+            timeout=60.0,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -314,7 +314,7 @@ async def synthesize_responses(
     successful = [r for r in model_responses if r["success"] and r["response"]]
 
     if not successful:
-        return "I'm sorry, I couldn't get a response right now. Please check that your NVIDIA_API_KEY is set correctly."
+        return "I'm sorry, I couldn't get a response right now. The AI models may be temporarily overloaded — please try again in a moment."
 
     if len(successful) == 1:
         return successful[0]["response"]
@@ -349,9 +349,9 @@ Here are responses from different AI models:
                     "model": AGGREGATOR_MODEL,
                     "messages": agg_messages,
                     "temperature": 0.5,
-                    "max_tokens": 1024,
+                    "max_tokens": 4096,
                 },
-                timeout=45.0,
+                timeout=60.0,
             )
             resp.raise_for_status()
             data = resp.json()
