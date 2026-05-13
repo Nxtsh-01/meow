@@ -227,6 +227,11 @@ async def security_middleware(request: Request, call_next):
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         response.headers["Pragma"] = "no-cache"
+    # NEVER cache service worker, HTML, JS, CSS — always serve fresh
+    if request.url.path.endswith(('.js', '.css', '.html')) or request.url.path == '/':
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     
     return response
 
