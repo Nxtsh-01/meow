@@ -1,12 +1,7 @@
-const CACHE_NAME = 'meow-ai-tutor-v3';
-const ASSETS_TO_CACHE = [
-  './',
-  './index.html',
-  './style.css',
-  './app.js',
-  './manifest.json',
-  './icons/icon-192x192.png',
-  './icons/icon-512x512.png',
+const CACHE_NAME = 'meow-ai-tutor-v4';
+
+// CDN libraries that rarely change — safe to cache aggressively
+const CDN_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap',
   'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
@@ -20,11 +15,9 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(ASSETS_TO_CACHE);
-      })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(CDN_ASSETS))
   );
+  // Immediately take control — don't wait for old SW to die
   self.skipWaiting();
 });
 
@@ -34,47 +27,58 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log('🧹 Deleting old cache:', cache);
             return caches.delete(cache);
           }
         })
       );
     })
   );
+  // Take control of all open tabs immediately
   self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  // We only want to intercept GET requests.
-  // We do not want to cache the API requests to /api/chat.
+  // Skip non-GET requests and API calls
   if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        // Only cache valid responses
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+  const url = new URL(event.request.url);
+  const isAppFile = url.origin === self.location.origin;
+
+  if (isAppFile) {
+    // ── NETWORK-FIRST for our own files (HTML, JS, CSS) ──
+    // Always try the server first to get latest code
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          // Got fresh response — update the cache
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
           return networkResponse;
-        }
-        
-        // Clone the response because it's a stream and can only be consumed once
-        const responseToCache = networkResponse.clone();
-        
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+        })
+        .catch(() => {
+          // Network failed (offline) — fall back to cache
+          return caches.match(event.request).then((cached) => {
+            return cached || (event.request.mode === 'navigate' ? caches.match('./index.html') : undefined);
+          });
+        })
+    );
+  } else {
+    // ── CACHE-FIRST for CDN libraries (they never change) ──
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((resp) => {
+          if (resp && resp.status === 200) {
+            const clone = resp.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return resp;
         });
-        
-        return networkResponse;
-      }).catch(() => {
-        // Fallback for offline if the request was for a page
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
-    })
-  );
+      })
+    );
+  }
 });
