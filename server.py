@@ -434,6 +434,53 @@ async def health_check():
     """Lightweight health check for keep-alive pings and monitoring."""
     return {"status": "alive", "uptime": time.time()}
 
+from fastapi.responses import HTMLResponse
+
+@app.get("/api/reset", response_class=HTMLResponse)
+async def reset_cache():
+    """Serve a page that nukes all service workers and caches, then redirects to home."""
+    return """<!DOCTYPE html>
+<html><head><title>MEOW — Clearing Cache...</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { background: #0a0e1a; color: #e0d6c8; font-family: 'Inter', sans-serif; 
+       display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+.box { text-align: center; padding: 40px; }
+h1 { font-size: 2rem; margin-bottom: 10px; }
+p { font-size: 1.1rem; opacity: 0.7; }
+.spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); 
+           border-top-color: #e0d6c8; border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style></head>
+<body><div class="box">
+<h1>🧹 MEOW Cache Reset</h1>
+<div class="spinner"></div>
+<p id="status">Clearing old data...</p>
+<script>
+async function nukeEverything() {
+    const status = document.getElementById('status');
+    try {
+        // Step 1: Unregister all service workers
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) { await reg.unregister(); }
+        status.textContent = 'Service workers cleared...';
+        
+        // Step 2: Delete all caches
+        const names = await caches.keys();
+        for (const name of names) { await caches.delete(name); }
+        status.textContent = 'All caches deleted! Redirecting...';
+        
+        // Step 3: Redirect to home after a moment
+        setTimeout(() => { window.location.href = '/'; }, 1500);
+    } catch(e) {
+        status.textContent = 'Done! Redirecting...';
+        setTimeout(() => { window.location.href = '/'; }, 1000);
+    }
+}
+nukeEverything();
+</script>
+</div></body></html>"""
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Main chat endpoint — intercepts multimedia or queries models in parallel."""
