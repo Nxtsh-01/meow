@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -150,7 +151,7 @@ async def lifespan(app: FastAPI):
 
 from collections import defaultdict
 from fastapi import Request
-from fastapi.responses import JSONResponse
+
 
 app = FastAPI(title="MEOW AI Tutor", lifespan=lifespan)
 
@@ -434,7 +435,7 @@ async def health_check():
     """Lightweight health check for keep-alive pings and monitoring."""
     return {"status": "alive", "uptime": time.time()}
 
-from fastapi.responses import HTMLResponse
+
 
 @app.get("/api/reset", response_class=HTMLResponse)
 async def reset_cache():
