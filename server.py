@@ -228,11 +228,16 @@ async def security_middleware(request: Request, call_next):
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         response.headers["Pragma"] = "no-cache"
+        # NUCLEAR: Force browser to clear all cached data (fixes stale SW for ALL users)
+        # The old service worker skips /api/ requests, so this header reaches the browser directly.
+        # The browser then automatically deletes all caches and service worker registrations.
+        response.headers["Clear-Site-Data"] = '"cache", "storage"'
     # NEVER cache service worker, HTML, JS, CSS — always serve fresh
     if request.url.path.endswith(('.js', '.css', '.html')) or request.url.path == '/':
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        response.headers["Clear-Site-Data"] = '"cache", "storage"'
     
     return response
 
