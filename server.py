@@ -496,6 +496,18 @@ async def chat(req: ChatRequest):
     if not GROQ_API_KEY:
         raise HTTPException(status_code=500, detail="GROQ_API_KEY not set. Get a free key at https://console.groq.com")
 
+    # ── SERVER-SIDE History Sanitization ──
+    # Only strip massive base64 image/video data that crashes Groq API
+    # Keep plenty of messages (50) so teaching sessions maintain context
+    sanitized_history = []
+    for msg in req.history[-50:]:  # Keep last 50 messages for teaching continuity
+        content = msg.content
+        if len(content) > 2000:
+            # This is likely a base64 image response — truncate just the data
+            content = content[:300] + "\n\n[Media content removed to save space — the image/video was displayed above]"
+        sanitized_history.append(Message(role=msg.role, content=content))
+    req.history = sanitized_history
+
     session_id = req.session_id or str(uuid.uuid4())
     start = time.time()
     msg_lower = req.message.lower().strip()
